@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::cmp::{Ordering};
 use std::marker::PhantomData;
 
-mod leapfrog {
+pub mod leapfrog {
     use super::*;
 //    use super::LUB;
 
@@ -204,43 +204,139 @@ mod leapfrog {
 
     }
 
+    pub mod vec {
+        use std::fmt::Debug;
+        pub struct VecAdapter<'a,T>
+            where T: 'a + Ord + PartialOrd + Eq + PartialEq + Clone + Debug
+        {
+            vec:&'a [T],
+            index:usize
+        }
+        impl<'a,T> VecAdapter<'a,T>
+            where T: 'a + Ord + PartialOrd + Eq + PartialEq + Clone + Debug{
+            pub fn new(vec:&'a [T]) -> VecAdapter<'a,T> {
+                VecAdapter{vec:vec,index:0}
+            }
+
+            pub fn seek(&mut self,seek:&T) {
+                let mut new_ind = match &self.vec[self.index..].binary_search(seek) {
+                    &Ok(val) => val,
+                    &Err(val) => val
+                };
+                if self.vec.len() > (new_ind+self.index) && self.vec[new_ind+self.index] < *seek {
+                    new_ind += 1;
+                }
+                
+                self.index += new_ind;
+            }
+        }
+
+        impl<'a,T> Iterator for VecAdapter<'a,T>
+            where T: 'a + Ord + PartialOrd + Eq + PartialEq + Clone + Debug {
+            type Item=&'a T;
+            fn next(&mut self) -> Option<Self::Item> {
+                if self.index >= self.vec.len() {
+                    None
+                } else {
+                    let ret = &self.vec[self.index];
+                    self.index += 1;
+                    Some(ret)
+                }
+            }
+        }
+
+        use super::{Peekable,MonotonicSeekable};
+        impl<'a,T> Peekable for VecAdapter<'a,T>
+            where T: 'a + Ord + PartialOrd + Eq + PartialEq + Clone + Debug{
+            type Item=&'a T;
+            fn peek(&self) -> Option<Self::Item> {
+                if self.index >= self.vec.len() {
+                    None
+                } else {
+                    Some(&self.vec[self.index])
+                }
+            }
+        }
+
+        impl<'a,T> MonotonicSeekable for VecAdapter<'a,T>
+            where T: 'a + Ord + PartialOrd + Eq + PartialEq + Clone + Debug{
+            type Item=&'a T;
+            fn least_upper_bound(&mut self, seek:&Self::Item) -> Option<Self::Item> {
+                self.seek(seek);
+                self.peek()
+            }
+        }
+        use std::cmp::Ordering;
+
+        impl<'a, T> Ord for VecAdapter<'a,T>
+            where T: 'a + Ord + PartialOrd + Eq + PartialEq + Clone + Debug{
+            fn cmp(&self,other:&Self) -> Ordering {
+                match (self.peek(),other.peek()) {
+                    (Some(lhs),Some(rhs)) => { lhs.cmp(&rhs)},
+                    (None,Some(_)) => Ordering::Greater,
+                    (Some(_),None) => Ordering::Less,
+                    (None,None) => Ordering::Equal
+                }
+            }
+        }
+        impl<'a, T> Eq for VecAdapter<'a,T>
+            where T: 'a + Ord + PartialOrd + Eq + PartialEq + Clone + Debug {}
+        impl<'a, T> PartialEq for VecAdapter<'a,T>
+            where T: 'a + Ord + PartialOrd + Eq + PartialEq + Clone + Debug{
+            fn eq(&self,other:&Self) -> bool {
+                match (self.peek(),other.peek()) {
+                    (Some(lhs),Some(rhs)) => { lhs.eq(&rhs)},
+                    (None,None) => true,
+                    _ => false
+                }
+            }
+        }
+        impl<'a, T> PartialOrd for VecAdapter<'a,T>
+            where T: 'a + Ord + PartialOrd + Eq + PartialEq + Clone + Debug{
+            fn partial_cmp(&self,other:&Self) -> Option<Ordering> {
+                match (self.peek(),other.peek()) {
+                    (Some(lhs),Some(rhs)) => { lhs.partial_cmp(&rhs)},
+                    (None,Some(_)) => Some(Ordering::Greater),
+                    (Some(_),None) => Some(Ordering::Less),
+                    (None,None) => Some(Ordering::Equal)
+                }
+            }
+        }
+
+    }
+
+
     #[cfg(test)]
     mod tests {
         use quickcheck::*;
         use std::collections::BTreeSet;
         use super::*;
-        
+        use super::vec::VecAdapter;
 
         #[test]
-        fn leapfrog_v_set_triangle() {
+        fn btree_leapfrog_v_set_triangle() {
             fn prop(a:Vec<u8>,b:Vec<u8>,c:Vec<u8>) -> bool {
-
                 let mut bta = BTreeSet::new();
                 bta.extend(a.clone().into_iter());
                 let mut btb = BTreeSet::new();
                 btb.extend(b.clone().into_iter());
                 let mut btc = BTreeSet::new();
                 btc.extend(c.clone().into_iter());
-
                 let iab = bta.intersection(&btb).cloned()
                     .collect::<BTreeSet<u8>>();
                 let iabc= iab.intersection(&btc)
                     .collect::<Vec<&u8>>();
-
                 let lfjs = vec![BTreeLeapAdapter::new(&bta),BTreeLeapAdapter::new(&btb),BTreeLeapAdapter::new(&btc)];
-
                 let leap_frog = UnaryJoiner::new(lfjs);
                 let test = leap_frog.collect::<Vec<&u8>>();
-
                 test == iabc
             }
-
             quickcheck(prop as fn(Vec<u8>,Vec<u8>,Vec<u8>)-> bool);
         }
 
 
         #[test]
-        fn leapfrog_many() {
+        fn btree_leapfrog_many() {
             fn prop(data:Vec<Vec<u8>>) -> bool {
                 if data.len() < 2 {return true}
                 let start = data[0].iter().cloned().collect::<BTreeSet<u8>>();
@@ -263,12 +359,78 @@ mod leapfrog {
 
                 test == good.iter().collect::<BTreeSet<&u8>>()
             }
+            QuickCheck::new()
+                .tests(1000)
+                .max_tests(5000)
+                .quickcheck(prop as fn(Vec<Vec<u8>>)-> bool);
+        }
+
+
+        #[test]
+        fn vec_leapfrog_v_set_triangle() {
+            fn prop(a:Vec<u8>,b:Vec<u8>,c:Vec<u8>) -> bool {
+                let mut va = a.clone();
+                va.sort();
+                va.dedup();
+                let mut vb = b.clone();
+                vb.sort();
+                vb.dedup();
+                let mut vc = c.clone();
+                vc.sort();
+                vc.dedup();
+
+                let lfjs = vec![VecAdapter::new(&va),VecAdapter::new(&vb),VecAdapter::new(&vc)];
+                let leap_frog = UnaryJoiner::new(lfjs);
+                let test = leap_frog.collect::<Vec<&u8>>();
+
+                let mut bta = BTreeSet::new();
+                bta.extend(a.clone().into_iter());
+                let mut btb = BTreeSet::new();
+                btb.extend(b.clone().into_iter());
+                let mut btc = BTreeSet::new();
+                btc.extend(c.clone().into_iter());
+                let iab = bta.intersection(&btb).cloned()
+                    .collect::<BTreeSet<u8>>();
+                let iabc= iab.intersection(&btc)
+                    .collect::<Vec<&u8>>();
+                test == iabc
+            }
+            // assert!(prop(vec![2, 7],
+            //              vec![1, 6],
+            //              vec![0, 1, 5]));
+            quickcheck(prop as fn(Vec<u8>,Vec<u8>,Vec<u8>)-> bool);
+        }
+
+
+        #[test]
+        fn vec_leapfrog_many() {
+            fn prop(data:Vec<Vec<u8>>) -> bool {
+                if data.len() < 2 {return true}
+                let start = data[0].iter().cloned().collect::<BTreeSet<u8>>();
+                let good = data.iter()
+                    .fold(start,|acc,new| {
+                        let t = new.iter().cloned().collect::<BTreeSet<u8>>();
+                        acc.intersection(&t).cloned().collect::<BTreeSet<u8>>()
+                    });
+
+                let mut db = data;
+                let lfjs = db.iter_mut().map(|t| {
+                    t.sort();
+                    t.dedup();
+                    VecAdapter::new(t)}).collect();
+
+                let leap_frog = UnaryJoiner::new(lfjs);
+                let test = leap_frog.collect::<BTreeSet<&u8>>();
+
+                test == good.iter().collect::<BTreeSet<&u8>>()
+            }
 
             QuickCheck::new()
                 .tests(1000)
                 .max_tests(5000)
                 .quickcheck(prop as fn(Vec<Vec<u8>>)-> bool);
         }
+
     }
 }
 
@@ -590,22 +752,27 @@ mod benches {
 
     macro_rules! bench_suite {
         () => {
+            #[ignore]
             #[bench]
             fn dense_10_100_(b:&mut Bencher) {
                 bench_press(D::Dense,10,100,b);
             }
+            #[ignore]
             #[bench]
             fn dense_100_100_(b:&mut Bencher) {
                 bench_press(D::Dense,100,100,b);
             }
+            #[ignore]
             #[bench]
             fn dense_1000_100_(b:&mut Bencher) {
                 bench_press(D::Dense,1000,100,b);
             }
+            #[ignore]
             #[bench]
             fn dense_10_10000_(b:&mut Bencher) {
                 bench_press(D::Dense,10,10000,b);
             }
+            #[ignore]
             #[bench]
             fn dense_100_10000_(b:&mut Bencher) {
                 bench_press(D::Dense,100,10000,b);
@@ -622,23 +789,27 @@ mod benches {
             fn dense_100_1000000_(b:&mut Bencher) {
                 bench_press(D::Dense,100,1000000,b);
             }
-
+            #[ignore]
             #[bench]
             fn sparse_10_100_(b:&mut Bencher) {
                 bench_press(D::Sparse,10,100,b);
             }
+            #[ignore]
             #[bench]
             fn sparse_100_100_(b:&mut Bencher) {
                 bench_press(D::Sparse,100,100,b);
             }
+            #[ignore]
             #[bench]
             fn sparse_1000_100_(b:&mut Bencher) {
                 bench_press(D::Sparse,1000,100,b);
             }
+            #[ignore]
             #[bench]
             fn sparse_10_10000_(b:&mut Bencher) {
                 bench_press(D::Sparse,10,10000,b);
             }
+            #[ignore]
             #[bench]
             fn sparse_100_10000_(b:&mut Bencher) {
                 bench_press(D::Sparse,100,10000,b);
@@ -647,6 +818,7 @@ mod benches {
             fn sparse_1000_10000_(b:&mut Bencher) {
                 bench_press(D::Sparse,1000,10000,b);
             }
+            #[ignore]
             #[bench]
             fn sparse_10_1000000_(b:&mut Bencher) {
                 bench_press(D::Sparse,10,1000000,b);
@@ -658,7 +830,7 @@ mod benches {
         }
     }
 
-    mod leapfrog {
+    mod leapfrog_btree {
         use super::*;
         use ::leapfrog::traits::leapfrog::*;
         use std::collections::BTreeSet;
@@ -669,6 +841,24 @@ mod benches {
                 let lfis = db.iter().map(|t| {BTreeLeapAdapter::new(t)}).collect();
                 let leap_frog = UnaryJoiner::new(lfis);
                 leap_frog.collect::<BTreeSet<&u32>>()
+            });
+        }
+
+        bench_suite!();
+    }
+
+    mod leapfrog_vec {
+        use super::*;
+        use ::leapfrog::traits::leapfrog::*;
+        use ::leapfrog::traits::leapfrog::vec::VecAdapter;
+
+
+        fn bench_press(d:D,width:u32,height:u32,b:&mut Bencher) {
+            let db = d.get::<Vec<u32>>(width,height);
+            b.iter(|| {
+                let lfis = db.iter().map(|t| {VecAdapter::new(t)}).collect();
+                let leap_frog = UnaryJoiner::new(lfis);
+                leap_frog.collect::<Vec<&u32>>()
             });
         }
 
@@ -724,4 +914,28 @@ mod benches {
         bench_suite!();
 
     }
+
+    mod btree_set_split {
+        use super::*;
+        use std::collections::BTreeSet;
+
+        fn bench_press(d:D,width:u32,height:u32,b:&mut Bencher) {
+            let seed = d.get::<BTreeSet<u32>>(width,height);
+
+            b.iter(move || {
+                let mut db = seed.clone();
+                while db.len() > 1 {
+                    let res = db.iter_mut().chunks(2).into_iter().map(|mut x| {
+                        let first = x.next().unwrap().clone();
+                        x.fold(first,|acc,n| {acc.intersection(&n).cloned().collect::<BTreeSet<u32>>()})
+                    }).collect::<Vec<BTreeSet<u32>>>();
+                    db = res;
+                }
+                db.clone()
+            });
+        }
+
+        bench_suite!();
+    }
+    
 }
