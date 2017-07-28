@@ -9,10 +9,14 @@ extern crate quickcheck;
 #[cfg(test)]
 extern crate test;
 
+
 extern crate itertools;
+extern crate chrono;
+extern crate nom;
 
-mod leapfrog;
 
+pub mod leapfrog;
+pub mod parser;
 
 
 trait Foo {
