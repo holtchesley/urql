@@ -777,14 +777,17 @@ mod benches {
             fn dense_100_10000_(b:&mut Bencher) {
                 bench_press(D::Dense,100,10000,b);
             }
+            #[ignore]
             #[bench]
             fn dense_1000_10000_(b:&mut Bencher) {
                 bench_press(D::Dense,1000,10000,b);
             }
+            #[ignore]
             #[bench]
             fn dense_10_1000000_(b:&mut Bencher) {
                 bench_press(D::Dense,10,1000000,b);
             }
+            #[ignore]
             #[bench]
             fn dense_100_1000000_(b:&mut Bencher) {
                 bench_press(D::Dense,100,1000000,b);
@@ -814,6 +817,7 @@ mod benches {
             fn sparse_100_10000_(b:&mut Bencher) {
                 bench_press(D::Sparse,100,10000,b);
             }
+            #[ignore]
             #[bench]
             fn sparse_1000_10000_(b:&mut Bencher) {
                 bench_press(D::Sparse,1000,10000,b);
@@ -823,6 +827,7 @@ mod benches {
             fn sparse_10_1000000_(b:&mut Bencher) {
                 bench_press(D::Sparse,10,1000000,b);
             }
+            #[ignore]
             #[bench]
             fn sparse_100_1000000_(b:&mut Bencher) {
                 bench_press(D::Sparse,100,1000000,b);
