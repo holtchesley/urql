@@ -1,0 +1,4 @@
+{:name ?first :location {:street ?street}}.
+{:name ?second :location {:street ?street}}.
+
+find(?first,?second).
