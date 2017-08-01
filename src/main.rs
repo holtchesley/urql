@@ -1,10 +1,13 @@
 #![feature(collections_range)]
 #![feature(associated_type_defaults)]
 #![feature(test)]
+#![feature(rand)]
 #![feature(iterator_step_by)]
 
 #[cfg(test)]
 extern crate quickcheck;
+#[cfg(test)]
+extern crate rand;
 
 #[cfg(test)]
 extern crate test;

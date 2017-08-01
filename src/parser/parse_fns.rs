@@ -1,42 +1,59 @@
 use nom::*;
 use super::*;
+use std::str;
+use std::str::{from_utf8,FromStr};
+
+////////// Tokens
 
 
+// Ignored
+named!(comment_inline<()>,
+       do_parse!(
+           tag!("/*") >>
+               take_until_and_consume!("*/") >>
+               ()
+       )
+);
+named!(comment_line<()>,
+       do_parse!(
+           tag!("//") >>
+               take_until_and_consume!("\n") >>
+               ()
+       )
+);
+named!(toss<()>,
+       map!(
+           many0!(
+               alt_complete!( map!(eof!(),|_|{()})
+                              | map!(multispace,|_|{()})
+                              | comment_inline
+                              | comment_line
+               )
+           ),
+           |_|{()}
+       )
+);
 
+// Delimiters
 
-    use std::str::{from_utf8,FromStr};
+named!(comma<()>, delimited!(toss,map!(tag!(","),|x| {()}),toss));
 
-    named!(comment_inline<()>,
-           do_parse!(
-               tag!("/*") >>
-                   take_until_and_consume!("*/") >>
-                   ()
-           )
-    );
+named!(implicates<()>, delimited!(toss,map!(tag!(":-"),|x| {()}),toss));
 
-    named!(comment_line<()>,
-           do_parse!(
-               tag!("//") >>
-                   take_until_and_consume!("\n") >>
-                   ()
-           )
-    );
+named!(open_paren<()>,delimited!(toss,map!(tag!("("),|x| {()}),toss));
+named!(close_paren<()>,delimited!(toss,map!(tag!(")"),|x| {()}),toss));
 
-    named!(toss<()>,
-           map!(
-               many0!(
-                   alt_complete!( map!(eof!(),|_|{()})
-                                  | map!(multispace,|_|{()})
-                                  | comment_inline
-                                  | comment_line
-                   )
-               ),
-               |_|{()}
-           )
-    );
+named!(open_curly<()>,delimited!(toss,map!(tag!("{"),|x| {()}),toss));
+named!(close_curly<()>,delimited!(toss,map!(tag!("}"),|x| {()}),toss));
 
-    named!(integer<i64>,
-           map_res!(
+named!(open_square<()>,delimited!(toss,map!(tag!("["),|x| {()}),toss));
+named!(close_square<()>,delimited!(toss,map!(tag!("]"),|x| {()}),toss));
+
+// Numbers
+named!(integer<i64>,
+       do_parse!(
+           neg: opt!(tag!("-")) >>
+           i:map_res!(
                delimited!(toss,digit,toss),
                |x| {
                    if let Ok(y) = from_utf8(x) {
@@ -49,78 +66,111 @@ use super::*;
                        Err(ParseErrors::UTF8ConversionError)
                    }
                }
-           )
-    );
-
-
-    named!(float_nan,tag!("NaN"));
-    named!(float_inf,do_parse!(opt!(tag!("-")) >> a:tag!("inf") >> (a)));
-    named!(float_e,do_parse!(is_a!("eE") >> opt!(tag!("-")) >> a:digit >> (a)));
-    named!(float_happy,do_parse!(
-        opt!(digit) >>
-            a:tag!(".") >>
-            alt!(recognize!(eof!()) | recognize!(opt!(digit))) >>
-            alt!(recognize!(eof!()) | recognize!(opt!(float_e))) >>
-            (a)));
-
-
-    named!(float_alts<f64>,
-           delimited!(toss,
-                      add_return_error!(ErrorKind::Custom(1),
+           ) >>
+               (match neg {Some(_) => -1*i, _ => i})
+       )
+);
+named!(float_nan,tag!("NaN"));
+named!(float_inf,do_parse!(opt!(tag!("-")) >> a:tag!("inf") >> (a)));
+named!(float_e,do_parse!(is_a!("eE") >> opt!(tag!("-")) >> a:digit >> (a)));
+named!(float_happy,do_parse!(
+    opt!(tag!("-")) >>
+    opt!(digit) >>
+        a:tag!(".") >>
+        alt!(recognize!(eof!()) | recognize!(opt!(digit))) >>
+        alt!(recognize!(eof!()) | recognize!(opt!(float_e))) >>
+        (a)));
+named!(float_alts<f64>,
+       delimited!(toss,
+                  add_return_error!(ErrorKind::Custom(1),
+                                    map_res!(
                                         map_res!(
-                                            map_res!(
-                                                recognize!(
-                                                    alt!(float_nan | float_inf | float_happy)
-                                                ),
-                                                str::from_utf8
+                                            recognize!(
+                                                alt_complete!(float_nan | float_inf | float_happy)
                                             ),
-                                            FromStr::from_str
-                                        )
-                      ),
-                      toss)
-    );
+                                            str::from_utf8
+                                        ),
+                                        FromStr::from_str
+                                    )
+                  ),
+                  toss)
+);
 
 
-    named!(boolean<bool>,
-           delimited!(toss,
+// Booleans
+named!(boolean<bool>,
+       delimited!(toss,
+                  map_res!(
                       map_res!(
-                          map_res!(
-                              alt!(tag!("true") | tag!("false")),
-                              str::from_utf8
-                          ),
-                          FromStr::from_str
+                          alt_complete!(tag!("true") | tag!("false")),
+                          str::from_utf8
                       ),
-                      toss
-           )
-    );
-
-    named!(variable<Variable<'a> >,
-           delimited!(toss,
-                      map_res!(
-                          map_res!(
-                              recognize!(
-                                  do_parse!(
-                                      alt!(alpha | is_a!("_")) >>
-                                          alt!(recognize!(eof!()) | recognize!(opt!(alt!(alphanumeric)))) >>
-                                          (())
-                                  )
-                              ),
-                              str::from_utf8),
-                          Variable::from_str
-                      )
-                      ,toss
-           )
-    );
+                      FromStr::from_str
+                  ),
+                  toss
+       )
+);
 
 
+// Identifier
+named!(identifier<&'a str>,
+       map_res!(
+           recognize!(
+               do_parse!(
+                   alt_complete!(alpha | is_a!("_")) >>
+                       alt!(recognize!(eof!())
+                            | recognize!(opt!(alphanumeric))) >>
+                       (())
+               )
+           ),
+           str::from_utf8)
+);
 
-use std::str;
+// Vars
+named!(variable<Variable >,delimited!(toss,map_res!(identifier, Variable::from_str),toss));
 
+
+
+// String Literals
+fn to_s(i:Vec<u8>) -> String {
+    String::from_utf8_lossy(&i).into_owned()
+}
+
+named!(string_contents<String >,
+       map!(
+           escaped_transform!(is_not!("\\\""), '\\',
+                              alt_complete!(
+                                  tag!("\\")       => { |_| &b"\\"[..] }
+                                  | tag!("\"")       => { |_| &b"\""[..] }
+                                  | tag!("n")        => { |_| &b"\n"[..] }
+                              )
+           ), to_s
+       )
+);
+
+named!(string_lit<String>,
+       do_parse!(
+           toss >>
+           tag!("\"") >>
+               cont:opt!(string_contents) >>
+               tag!("\"") >>
+               toss >>
+               (cont.unwrap_or_default())
+       )
+);
+
+
+// Expressions
 
 named!(number<Number>,alt_complete!(map!(float_alts, Number::Float) | map!(integer,Number::Int)));
 
+named!(literal<Literal>,alt_complete!(map!(string_lit,Literal::String)
+                                      |map!(float_alts,Literal::Float)
+                                      |map!(integer,Literal::Int)
+                                      |map!(boolean,Literal::Bool)));
 
-named!(binary_arith_operator_1<BinaryOperator>,
+// Arithmetic Trees
+named!(binary_operator_1<BinaryOperator>,
        delimited!(toss,
                   map_res!(
                       map_res!(
@@ -131,7 +181,7 @@ named!(binary_arith_operator_1<BinaryOperator>,
                   toss
        )
 );
-named!(binary_arith_operator_2<BinaryOperator>,
+named!(binary_operator_2<BinaryOperator>,
        delimited!(toss,
                   map_res!(
                       map_res!(
@@ -142,7 +192,7 @@ named!(binary_arith_operator_2<BinaryOperator>,
                   toss
        )
 );
-named!(binary_arith_operator_3<BinaryOperator>,
+named!(binary_operator_3<BinaryOperator>,
        delimited!(toss,
                   map_res!(
                       map_res!(
@@ -153,82 +203,21 @@ named!(binary_arith_operator_3<BinaryOperator>,
                   toss
        )
 );
-named!(arith_parens<Box<ArithExpr<'a> > >,
-       delimited!(toss,
-                  map!(delimited!(tag!("("),arith_expr,tag!(")")),Box::new),
-                  toss
-       )
-);
-
-fn arith_left_fold<'a>(initial: ArithExpr<'a>,remainder: Vec<(BinaryOperator,ArithExpr<'a>)>) -> ArithExpr<'a> {
-    remainder.into_iter().fold(initial,|left,pair| {
-        let (op,right) = pair;
-        ArithExpr::BinaryResult((Box::new(left),op,Box::new(right)))
-    })
-}
-
-named!(arith_expr_bottom< ArithExpr<'a> >,
-       alt!(
-           map!(number,|n| {ArithExpr::Value(n)})
-               | map!(arith_parens,ArithExpr::Paren)
-               | map!(variable,ArithExpr::Variable)
-       )
-);
-named!(unary_arith_operator<UnaryArithOperator>,
+// Comparison Trees
+named!(binary_operator_4<BinaryOperator>,
        delimited!(toss,
                   map_res!(
                       map_res!(
-                          tag!("-"),
+                          alt_complete!( tag!("<=") | tag!("<")
+                                         | tag!("==") | tag!("!=")
+                                         | tag!(">=") | tag!(">")),
                           str::from_utf8),
                       FromStr::from_str
                   ),
                   toss
        )
 );
-named!(arith_expr_0< ArithExpr<'a> >,
-       do_parse!(
-           op: opt!(unary_arith_operator) >>
-           exp : arith_expr_bottom >>
-               (if let Some(o) = op {ArithExpr::UnaryResult((o,Box::new(exp)))} else {exp})
-       )
-);
-named!(arith_expr_1<ArithExpr<'a> >,
-       do_parse!(
-           left: arith_expr_0 >>
-               remainder: many0!(
-                   do_parse!(op: binary_arith_operator_1 >>
-                             right:arith_expr_0 >>
-                             (op,right)
-                   )) >>
-               (arith_left_fold(left,remainder))
-       )
-);
-named!(arith_expr_2<ArithExpr<'a> >,
-       do_parse!(
-           left: arith_expr_1 >>
-               remainder: many0!(
-                   do_parse!(op: binary_arith_operator_2 >>
-                             right:arith_expr_1 >>
-                             (op,right)
-                   )) >>
-               (arith_left_fold(left,remainder))
-       )
-);
-named!(arith_expr<ArithExpr<'a> >,
-       do_parse!(
-           left: arith_expr_2 >>
-               remainder: many0!(
-                   do_parse!(op: binary_arith_operator_3 >>
-                             right:arith_expr_2 >>
-                             (op,right)
-                   )) >>
-               (arith_left_fold(left,remainder))
-       )
-);
-
-
-
-named!(binary_bool_operator_1<BinaryBoolOperator>,
+named!(binary_operator_5<BinaryOperator>,
        delimited!(toss,
                   map_res!(
                       map_res!(
@@ -239,7 +228,7 @@ named!(binary_bool_operator_1<BinaryBoolOperator>,
                   toss
        )
 );
-named!(binary_bool_operator_2<BinaryBoolOperator>,
+named!(binary_operator_6<BinaryOperator>,
        delimited!(toss,
                   map_res!(
                       map_res!(
@@ -250,7 +239,7 @@ named!(binary_bool_operator_2<BinaryBoolOperator>,
                   toss
        )
 );
-named!(binary_bool_operator_3<BinaryBoolOperator>,
+named!(binary_operator_7<BinaryOperator>,
        delimited!(toss,
                   map_res!(
                       map_res!(
@@ -262,90 +251,27 @@ named!(binary_bool_operator_3<BinaryBoolOperator>,
        )
 );
 
-named!(bool_parens<Box<BoolExpr<'a> > >,
-       delimited!(toss,
-                  map!(delimited!(tag!("("),bool_expr,tag!(")")),Box::new),
-                  toss
-       )
-);
+named!(expr_parens<Box<Expr> >,delimited!(open_paren,map!(expr,Box::new),close_paren) );
 
-
-fn bool_left_fold<'a>(initial: BoolExpr<'a>,remainder: Vec<(BinaryBoolOperator,BoolExpr<'a>)>) -> BoolExpr<'a> {
+fn left_fold(initial: Expr,remainder: Vec<(BinaryOperator,Expr)>) -> Expr {
     remainder.into_iter().fold(initial,|left,pair| {
         let (op,right) = pair;
-        BoolExpr::BinaryResult((Box::new(left),op,Box::new(right)))
+        Expr::BinaryResult((Box::new(left),op,Box::new(right)))
     })
 }
-
-
-named!(bool_expr_bottom< BoolExpr<'a> >,
-       alt!(
-           map!(boolean,|n| {BoolExpr::Value(n)})
-               | map!(bool_parens,BoolExpr::Paren)
-               | map!(variable,BoolExpr::Variable)
-               | map!(num_to_bool_expr,BoolExpr::Comparison)
+named!(expr_bottom< Expr >,
+       alt_complete!(
+           map!(literal,|n| {Expr::Value(n)})
+               | map!(expr_parens,Expr::Paren)
+               | map!(variable,Expr::Variable)
        )
 );
-named!(unary_bool_operator<UnaryBoolOperator>,
+
+named!(unary_operator<UnaryOperator>,
        delimited!(toss,
                   map_res!(
                       map_res!(
-                          tag!("!"),
-                          str::from_utf8),
-                      FromStr::from_str
-                  ),
-                  toss
-       )
-);
-named!(bool_expr_0< BoolExpr<'a> >,
-       do_parse!(
-           op: opt!(unary_bool_operator) >>
-           exp : bool_expr_bottom >>
-               (if let Some(o) = op {BoolExpr::UnaryResult((o,Box::new(exp)))} else {exp})
-       )
-);
-named!(bool_expr_1<BoolExpr<'a> >,
-       do_parse!(
-           left: bool_expr_0 >>
-               remainder: many0!(
-                   do_parse!(op: binary_bool_operator_1 >>
-                             right:bool_expr_0 >>
-                             (op,right)
-                   )) >>
-               (bool_left_fold(left,remainder))
-       )
-);
-named!(bool_expr_2<BoolExpr<'a> >,
-       do_parse!(
-           left: bool_expr_1 >>
-               remainder: many0!(
-                   do_parse!(op: binary_bool_operator_2 >>
-                             right:bool_expr_1 >>
-                             (op,right)
-                   )) >>
-               (bool_left_fold(left,remainder))
-       )
-);
-named!(bool_expr<BoolExpr<'a> >,
-       do_parse!(
-           left: bool_expr_2 >>
-               remainder: many0!(
-                   do_parse!(op: binary_bool_operator_3 >>
-                             right:bool_expr_2 >>
-                             (op,right)
-                   )) >>
-               (bool_left_fold(left,remainder))
-       )
-);
-
-
-named!(num_to_bool_operator<NumToBoolMorph>,
-       delimited!(toss,
-                  map_res!(
-                      map_res!(
-                          alt!( tag!("<") | tag!("<=")
-                                | tag!("=") | tag!("!=")
-                                | tag!(">") | tag!(">=")),
+                          alt!(tag!("!") | tag!("-")),
                           str::from_utf8),
                       FromStr::from_str
                   ),
@@ -353,15 +279,251 @@ named!(num_to_bool_operator<NumToBoolMorph>,
        )
 );
 
-named!(num_to_bool_expr<NumToBoolExpr<'a> >,
+named!(expr_0< Expr >,
        do_parse!(
-           l: arith_expr >>
-               op: num_to_bool_operator >>
-               r: arith_expr >>
-               (NumToBoolExpr::BinaryResult((Box::new(l),op,Box::new(r))))
+           op: opt!(unary_operator) >>
+           exp : expr_bottom >>
+               (Expr::to_unary(op,exp))
+       )
+);
+named!(expr_1<Expr >,
+       do_parse!(
+           left: expr_0 >>
+               remainder: many0!(
+                   do_parse!(op: binary_operator_1 >>
+                             right:expr_0 >>
+                             (op,right)
+                   )) >>
+               (left_fold(left,remainder))
+       )
+);
+named!(expr_2<Expr >,
+       do_parse!(
+           left: expr_1 >>
+               remainder: many0!(
+                   do_parse!(op: binary_operator_2 >>
+                             right:expr_1 >>
+                             (op,right)
+                   )) >>
+               (left_fold(left,remainder))
+       )
+);
+named!(expr_3<Expr >,
+       do_parse!(
+           left: expr_2 >>
+               remainder: many0!(
+                   do_parse!(op: binary_operator_3 >>
+                             right:expr_2 >>
+                             (op,right)
+                   )) >>
+               (left_fold(left,remainder))
        )
 );
 
+named!(expr_4<Expr >,
+       do_parse!(
+           left: expr_3 >>
+               remainder: many0!(
+                   do_parse!(op: binary_operator_4 >>
+                             right:expr_3 >>
+                             (op,right)
+                   )) >>
+               (left_fold(left,remainder))
+       )
+
+       // do_parse!(
+       //     l: expr_3 >>
+       //         m: opt!(tuple!(binary_operator_4,expr_3)) >>
+       //         (if let Some((op,r)) = m {Expr::BinaryResult((Box::new(l),op,Box::new(r)))} else {l})
+       // )
+);
+
+named!(expr_5<Expr >,
+       do_parse!(
+           left: expr_4 >>
+               remainder: many0!(
+                   do_parse!(op: binary_operator_5 >>
+                             right:expr_4 >>
+                             (op,right)
+                   )) >>
+               (left_fold(left,remainder))
+       )
+);
+
+named!(expr_6<Expr >,
+       do_parse!(
+           left: expr_5 >>
+               remainder: many0!(
+                   do_parse!(op: binary_operator_6 >>
+                             right:expr_5 >>
+                             (op,right)
+                   )) >>
+               (left_fold(left,remainder))
+       )
+);
+
+named!(expr<Expr >,
+       do_parse!(
+           left: expr_6 >>
+               remainder: many0!(
+                   do_parse!(op: binary_operator_7 >>
+                             right:expr_6 >>
+                             (op,right)
+                   )) >>
+               (left_fold(left,remainder))
+       )
+);
+
+
+
+
+// Master Expr
+// named!(expr<Expr>, call!(expr_7));
+
+
+
+
+// Term
+named!(term<Term >,
+       alt_complete!(map!(float_alts, |x| {Term::Literal(Literal::Float(x))})
+           | map!(integer, |x| {Term::Literal(Literal::Int(x))})
+            | map!(string_lit, |x| {Term::Literal(Literal::String(x))})
+            | map!(boolean, |x| {Term::Literal(Literal::Bool(x))})
+            | map!(variable, Term::Variable)
+       )
+);
+
+/////// Facts
+
+// Equation
+
+named!(equation<Equation >,
+       do_parse!(
+           var:variable >>
+               delimited!(toss,tag!("="),toss) >>
+               exp: expr >>
+               (Equation{value:var,expr:exp})
+       )
+);
+
+
+// Within clause
+
+named!(within<SemiRange >,
+       do_parse!(
+          var: variable >>
+               toss >>
+               tag!("in") >>
+               toss >>
+          lbt: alt!(tag!("(") | tag!("[")) >>
+               toss >>
+               lower: opt!(term) >>
+               comma >>
+               upper: opt!(term) >>
+          ubt: alt!(tag!(")") | tag!("]")) >>
+               (SemiRange::new(var,lbt,lower,ubt,upper))
+       )
+);
+
+// Row
+named!(row_fact<RowFact >,
+       do_parse!(
+       id: identifier >>
+           open_paren >>
+    terms: separated_nonempty_list!(tag!(","),term) >>
+           close_paren >>
+           (RowFact{head:Identifier::from(String::from(id)),terms:terms})
+       )
+);
+
+
+// Tree
+
+named!(av_pair<(Term,TreeTerm)>,
+       do_parse!(
+           at: term >>
+               val: opt!(alt_complete!(subtree | map!(term,TreeTerm::Term))) >>
+               (at, val.unwrap_or(TreeTerm::Term(Term::Variable(Variable::Hole))))
+       )
+);
+
+named!(unnamed_subtree<Vec<(Term,TreeTerm)> >,
+       do_parse!(
+           open_curly >>
+               pairs: many1!(av_pair) >>
+               close_curly >>
+           (pairs)
+       )
+);
+
+
+named!(subtree<TreeTerm >,
+       alt_complete!(
+           map!(unnamed_subtree,
+                |avs|
+                TreeTerm::Tree(Box::new(TreeFact{entity: Term::Variable(Variable::Hole),
+                                                 avs: avs,
+                                                 t: Term::Variable(Variable::Hole)
+                }))
+           ) |
+           map!(named_subtree, |x| {TreeTerm::Tree(Box::new(x))})
+       )
+);
+
+
+named!(named_subtree<TreeFact >,
+       do_parse!(
+           open_square >>
+               entity: opt!(term) >>
+               av: alt_complete!(unnamed_subtree | map!( av_pair, |x| vec![x] ) )>>
+               t: opt!(term) >>
+               close_square >>
+               (TreeFact{entity: entity.unwrap_or(Term::Variable(Variable::Hole)),
+                         avs:av,
+                         t:t.unwrap_or(Term::Variable(Variable::Hole))})
+       )
+);
+
+named!(tree_fact<TreeFact >,
+       alt_complete!(named_subtree
+                     | map!(unnamed_subtree,
+                            |avs| TreeFact{entity:Term::Variable(Variable::Hole),
+                                           avs:avs, t: Term::Variable(Variable::Hole)}
+            )
+       )
+);
+
+
+named!(prep<Pred>,
+       alt_complete!(map!(row_fact, Pred::RowFact)
+            | map!(tree_fact,       Pred::TreeFact)
+            | map!(equation,        Pred::Equation)
+            | map!(within,          Pred::SemiRange)
+       )
+);
+
+named!(fact<Fact>,
+       do_parse!(
+           f: prep  >>
+              tag!(";") >>
+              (Fact(f))
+       )
+);
+
+
+// Relation
+named!(relation<Relation>,
+       do_parse!(
+         head: identifier >>
+               open_paren >>
+               vars: separated_nonempty_list!(comma,variable) >>
+               close_paren >>
+               implicates >>
+               preps: separated_nonempty_list!(comma,prep) >>
+               tag!(";") >>
+               (Relation{head:Identifier::from(String::from(head)),vars:vars,preps:preps})
+       )
+);
 
 
 
@@ -372,12 +534,11 @@ mod tests {
     use std::string::*;
     use super::*;
     use quickcheck::*;
-
+    use rand::thread_rng;
 
     #[test]
     fn floats() {
         fn prop(s:String) -> bool {
-
             if let IResult::Done(rem,out) = float_alts(&s[..].as_bytes()) {
                 let newstr = &s[0..(s.len()-rem.len())];
                 if let Ok(Ok(y)) = str::from_utf8(newstr.as_bytes()).map(|x| x.trim()).map(FromStr::from_str) {
@@ -405,96 +566,119 @@ mod tests {
                 }
             }
         }
-
         assert!(prop(String::from("0. ")));
         QuickCheck::new()
             .tests(100000)
             .max_tests(500000)
             .quickcheck(prop as fn(String)-> bool);
-
     }
 
     #[test]
     fn int_tower() {
         let testa : Vec<String> = ["1","10"," 1","1 "," 1 "].into_iter().map(|x| String::from(*x)).collect();
-
         for s in testa {
             if let IResult::Done(_,_) = integer(&s[..].as_bytes()) {
                 assert!(true);
             } else {
+                println!("{} failed at integer.",s);
                 assert!(false);
             }
             if let IResult::Done(_,_) = number(&s[..].as_bytes()) {
                 assert!(true);
             } else {
+                println!("{} failed at number.",s);
                 assert!(false);
             }
-            if let IResult::Done(_,_) = arith_expr_bottom(&s[..].as_bytes()) {
+            if let IResult::Done(_,_) = expr_bottom(&s[..].as_bytes()) {
                 assert!(true);
             } else {
+                println!("{} failed at bottom.",s);
                 assert!(false);
             }
-            if let IResult::Done(_,_) = arith_expr_0(&s[..].as_bytes()) {
+            if let IResult::Done(_,_) = expr_0(&s[..].as_bytes()) {
                 assert!(true);
             } else {
+                println!("{} failed at 0.",s);
                 assert!(false);
             }
-            if let IResult::Done(_,_) = arith_expr_1(&s[..].as_bytes()) {
+            if let IResult::Done(_,_) = expr_1(&s[..].as_bytes()) {
                 assert!(true);
             } else {
+                println!("{} failed at 1.",s);
                 assert!(false);
             }
-            if let IResult::Done(_,_) = arith_expr_2(&s[..].as_bytes()) {
+            if let IResult::Done(_,_) = expr_2(&s[..].as_bytes()) {
                 assert!(true);
             } else {
+                println!("{} failed at 2.",s);
                 assert!(false);
             }
-            if let IResult::Done(_,_) = arith_expr(&s[..].as_bytes()) {
+            if let IResult::Done(_,_) = expr_3(&s[..].as_bytes()) {
                 assert!(true);
             } else {
+                println!("{} failed at 3.",s);
                 assert!(false);
             }
-
+            if let IResult::Done(_,_) = expr_4(&s[..].as_bytes()) {
+                assert!(true);
+            } else {
+                println!("{} failed at 4.",s);
+                println!("{:?}",expr_4(&s[..].as_bytes()));
+                assert!(false);
+            }
+            if let IResult::Done(_,_) = expr_5(&s[..].as_bytes()) {
+                assert!(true);
+            } else {
+                println!("{} failed at 5.",s);
+                assert!(false);
+            }
+            if let IResult::Done(_,_) = expr_6(&s[..].as_bytes()) {
+                assert!(true);
+            } else {
+                println!("{} failed at 6.",s);
+                assert!(false);
+            }
+            if let IResult::Done(_,_) = expr(&s[..].as_bytes()) {
+                assert!(true);
+            } else {
+                println!("{} failed at master.",s);
+                assert!(false);
+            }
         }
-
-
     }
 
     #[test]
-    fn arith_display() {
+    fn display() {
         let testo = String::from("  1 + 2 * 3 - 4 % 5 +  /* Happy Days */  (     foo * bar )     ");
         println!("----------------\ntesto:{}",testo);
-        if let IResult::Done(_,r) = arith_expr(&testo[..].as_bytes()) {
+        if let IResult::Done(_,r) = expr(&testo[..].as_bytes()) {
             println!("{}",r);
         } else {
             println!("Failed to parse.");
         }
-
         let testo = String::from("  -1 + 2 * 3 - -4 % 5 +  /* Happy Days */  (     -foo * bar )     ");
         println!("----------------\ntesto:{}",testo);
-        if let IResult::Done(_,r) = arith_expr(&testo[..].as_bytes()) {
+        if let IResult::Done(_,r) = expr(&testo[..].as_bytes()) {
             println!("{}",r);
         } else {
             println!("Failed to parse.");
         }
-
         let testo = String::from("-1");
         println!("----------------\ntesto:{}",testo);
-        if let IResult::Done(_,r) = arith_expr(&testo[..].as_bytes()) {
+        if let IResult::Done(_,r) = expr(&testo[..].as_bytes()) {
             println!("{}",r);
         } else {
             println!("Failed to parse.");
         }
         println!("Subtest:\n---");
-        if let IResult::Done(_,r) = arith_expr_0(&testo[..].as_bytes()) {
+        if let IResult::Done(_,r) = expr_0(&testo[..].as_bytes()) {
             println!("{}",r);
         } else {
             println!("Failed to parse.");
         }
-
         let testo = String::from("1");
         println!("----------------\ntesto:{}",testo);
-        if let IResult::Done(_,r) = arith_expr(&testo[..].as_bytes()) {
+        if let IResult::Done(_,r) = expr(&testo[..].as_bytes()) {
             println!("{}",r);
         } else {
             println!("Failed to parse.");
@@ -503,39 +687,33 @@ mod tests {
 
     #[test]
     fn bool_display() {
-
         let testo = String::from("  a & b | c ^ /* Bad Days */ (true & false)  /* Happy Days */    ");
         println!("----------------\ntesto:{}",testo);
-        if let IResult::Done(_,r) = bool_expr(&testo[..].as_bytes()) {
+        if let IResult::Done(_,r) = expr(&testo[..].as_bytes()) {
             println!("{}",r);
         } else {
             println!("Failed to parse.");
         }
-
         let testo = String::from(" ! true ^ true");
         println!("----------------\ntesto:{}",testo);
-        match  bool_expr(&testo[..].as_bytes()) {
+        match  expr(&testo[..].as_bytes()) {
             IResult::Done(_,r) => println!("{}",r),
             o => println!("Failed with: {:?}",o)
         }
-
         let testo = String::from(" !true ");
         println!("----------------\ntesto:{}",testo);
-        match  bool_expr(&testo[..].as_bytes()) {
+        match  expr(&testo[..].as_bytes()) {
             IResult::Done(_,r) => println!("{}",r),
             o => println!("Failed with: {:?}",o)
         }
         println!("Subtest:\n---");
-        match  bool_expr_0(&testo[..].as_bytes()) {
+        match  expr_0(&testo[..].as_bytes()) {
             IResult::Done(_,r) => println!("{}",r),
             o => println!("Failed with: {:?}",o)
         }
-        
-
-
         let testo = String::from(" true ");
         println!("----------------\ntesto:{}",testo);
-        match  bool_expr(&testo[..].as_bytes()) {
+        match  expr(&testo[..].as_bytes()) {
             IResult::Done(_,r) => println!("{}",r),
             o => println!("Failed with: {:?}",o)
         }
@@ -543,21 +721,214 @@ mod tests {
 
     #[test]
     fn complex_expr() {
-        let testo = b"1 + x < 10 ^ y";
-        if let IResult::Done(_,r) = bool_expr(&testo[..]) {
+        let tests = ["1 / 2",
+                     "1 + x",
+                     "x | y",
+                     "y | x",
+                     "_ / _",
+                     "_ + _ - 10 / 2",
+                     "1+x",
+                     "(1 + x)",
+                     "1+x < 10",
+                     "(1+x) < 10",
+                     "(1+x < 10)",
+                     "((1 + x) < 10)",
+                     "true|false",
+                     "x|y",
+                     "(x & true | y)",
+                     "((1 + x) < 10) | y",
+                     "((1 + x) < 10) ^ false"];
+        for s in tests.iter() {
+            let res = expr(&s[..].as_bytes());
+            println!("Parsing: {:?}",s);
+            println!("Result: {:?}",res);
+            if let IResult::Done(x,_) = res {
+                assert!(x.len() == 0);
+            } else {
+                assert!(false);
+            }
+        }
+    }
+
+    #[test]
+    fn equations() {
+        let tests = ["_ = _ / _"];
+        for s in tests.iter() {
+            let res = equation(&s[..].as_bytes());
+            println!("Parsing: {:?}",s);
+            println!("Result: {:?}",res);
+            if let IResult::Done(_,_) = res {
+            } else {
+                assert!(false);
+            }
+        }
+    }
+
+    #[test]
+    fn row_facts() {
+        let tests = ["foo(1,2,3)","bar(\"red\",\"blue\",\"green\")","bam(x,1.5)"];
+        for s in tests.iter() {
+            let res = row_fact(&s[..].as_bytes());
+            println!("Parsing: {:?}",s);
+            println!("Result: {:?}",res);
+            if let IResult::Done(_,_) = res {
+            } else {
+                assert!(false);
+            }
+        }
+    }
+
+    #[test]
+    fn tree_facts() {
+        let tests = ["[a b c d]","{\"foo\" x}",
+                     "[x {1 2}]",
+                     "{ \"\" 1}",
+                     "{ \"\" [0 0 _ _]}",
+                     "{ \"\" 1 2 3}",
+                     "{ \"\" 1 2 [0 0 _ _]}",
+                     "{ \"\" [0 0 _ _] 2 [0 0 _ _]}",
+                     "{ \"\" [0 0 _ _] -1 [_ 0 _ false]}"];
+        for s in tests.iter() {
+            let res = tree_fact(&s[..].as_bytes());
+            println!("Parsing: {:?}",s);
+            println!("Result: {:?}",res);
+            if let IResult::Done(_,_) = res {
+            } else {
+                assert!(false);
+            }
+        }
+    }
+
+    #[test]
+    fn literals() {
+        let tests = ["1","1.0","\"foo\"","\"\"","true","-3.9574767075378148"];
+        for s in tests.iter() {
+            let res = term(&s[..].as_bytes());
+            println!("Parsing: {:?}",s);
+            println!("Result: {:?}",res);
+            if let IResult::Done(_,_) = res {
+            } else {
+                assert!(false);
+            }
+        }
+    }
+
+    #[test]
+    fn facts() {
+        let tests = ["x=y;","foo(x,y);","[{1 x}];","x in [1,10];","x in (,10);","x in (,\"\");","_ = _ / _;",
+                     "[0 0 _ _];",
+                     "[_ 0 _ false];",
+                     "{ \"\" [0 0 _ _] -1 [_ 0 _ false]};",
+                     "[0.0000000000000000000000000000000000000000000000000000000000000000 { \"\" [0 0 _ _] -1 [_ 0 _ false]} false];",
+                     "[_ _ [0.0000000000000000000000000000000000000000000000000000000000000000 { \"\" [0 0 _ _] -1 [_ 0 _ false]} false] 0];",
+                     "[false 0 [_ _ [0.0000000000000000000000000000000000000000000000000000000000000000 { \"\" [0 0 _ _] -1 [_ 0 _ false]} false] 0] _];",
+        ];
+        for s in tests.iter() {
+            let res = fact(&s[..].as_bytes());
+            println!("Parsing: {:?}",s);
+            println!("Result: {:?}",res);
+            if let IResult::Done(_,_) = res {
+            } else {
+                assert!(false);
+            }
+        }
+    }
+
+    #[test]
+    fn relations() {
+        let tests = ["same( x , y ) :- x=y  ,  foo( x ) , bar( y   );","foo(x,y):-foo(y,x);","foo(x) :- [{1 x}];","q(_) :- _ = _;","e(_) :- _ in (0,\"\");","X(_) :- _ = 0;","E(_) :- _ = ((0));","w(_) :- [_ _ _ _];","Q(_) :- _ = _ + _ ;","Q(_) :- _ = _ - _ ;","Q(_) :- _ = _ % _ ;","Q(_) :- _ = _ * _ ;","Q(_) :- _ = _ / _ ;","b(_) :- [false 0 [_ _ [0.0000000000000000000000000000000000000000000000000000000000000000 { \"\" [0 0 _ _] -1 [_ 0 _ false]} false] 0] _];"];
+        for s in tests.iter() {
+            let res = relation(&s[..].as_bytes());
+            if let IResult::Done(_,_) = res {
+            } else {
+                println!("{} - {:?}",s,res);
+                assert!(false);
+            }
+        }
+    }
+
+    #[test]
+    fn roundtrip_relation() {
+        fn prop(r:Relation) -> bool {
             println!("{}",r);
-            assert!(true);
-        } else {
-            assert!(false);
+            println!("-----------------");
+            let s = format!("{}",r);
+            let res = relation(&s.as_bytes());
+            if let IResult::Done(_,t) = res {
+                let ss = format!("{}",t);
+                let ret = s == ss;
+                if !ret {
+                    println!("----------Alt---------");
+                    println!("Orig: {}|{:?}",r,r);
+                    println!("New: {}|{:?}",t,t);
+                }
+                ret
+            } else {
+                println!("----------------------");
+                println!("Orig: {}",s);
+                println!("New: {:?}",res);
+                false
+            }
         }
+        match QuickCheck::new()
+            .gen(StdGen::new(thread_rng(),5))
+            .tests(10000)
+            .max_tests(50000)
+            .quicktest(prop as fn(Relation)-> bool) {
+                Ok(_) => {},
+                Err(fail) => {
+                    println!("Failed.");
+                    // println!("Str: {}",fail.);
+                    println!("Dbg: {:?}",fail);
+                    assert!(false);
+                }
+        };
+    }
 
-        let testo = b"1 + x < 10 ^ false";
-        if let IResult::Done(_,r) = bool_expr(&testo[..]) {
-            println!("{:?}",r);
-            assert!(true);
-        } else {
-            assert!(false);
+
+    #[test]
+    fn gen_expr() {
+        fn prop(e:Expr) -> bool {
+            let s = format!("{}",e);
+            let res = expr(&s.as_bytes());
+            if let IResult::Done(_,t) = res {
+                let ss = format!("{}",t);
+                let ret = s == ss;
+                if !ret {
+                    println!("----------------");
+                    println!("Orig: {}",s);
+                    println!("Dbg: {:?}",e);
+                    println!("Round: {}",t);
+                    println!("Dbg: {:?}",t);
+                }
+                ret
+            } else {
+                println!("Failed {} - {:?}",s,res);
+                false
+            }
         }
+        QuickCheck::new()
+            .gen(StdGen::new(thread_rng(),10))
+            .tests(10000)
+            .max_tests(50000)
+            .quickcheck(prop as fn(Expr)-> bool);
+    }
 
+    #[test]
+    fn roundtrip_literal() {
+        fn prop(r:Literal) -> bool {
+            let s = format!("{}",r);
+            let res = term(&s.as_bytes());
+            if let IResult::Done(_,t) = res {
+                t == Term::Literal(r)
+            } else {
+                false
+            }
+        }
+        QuickCheck::new()
+            .gen(StdGen::new(thread_rng(),10))
+            .tests(10000)
+            .max_tests(50000)
+            .quickcheck(prop as fn(Literal)-> bool);
     }
 }
