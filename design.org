@@ -1,0 +1,21 @@
+* Executor
+** The main output is an iterator over tuples in sorted order.
+** Decision between:
+1) Passing a context-map ala minikanren
+2) Calculating an order for necessary variables, and outputting tuples
+3) Using an hlist?
+4) Using a vec.
+*** Tradeoffs
+**** Context maps involve some extra overhead. The course to use them seems strait forward with a map of name->enums
+**** It's not clear to me how to create tuples at runtime
+**** An HList would allow types to be kinda dynamically determined
+**** A vec would be easier to use, can keep the enumeration for literals. Must establish an order for vars though.
+*** For this to work on JSON, it has to keep the dynamic typing til the end. 
+**** Vec or Map seem like the best options.
+**** Map 
+*** Map. There is an issue of scoping that becomes important for relations.
+**** How to handle the variables that happen in a relation head, vs those that happen in the relation body?
+1) N copies of the relation, one for each use, with variables replaced with args
+2) 
+
+

@@ -1,7 +1,7 @@
 #![feature(collections_range)]
 #![feature(associated_type_defaults)]
 #![feature(test)]
-#![feature(rand)]
+// #![feature(rand)]
 #![feature(iterator_step_by)]
 
 #[cfg(test)]
@@ -20,25 +20,8 @@ extern crate nom;
 
 pub mod leapfrog;
 pub mod parser;
-
-
-trait Foo {
-    type A:Ord;
-    fn foo() {println!("Foo")}
-}
-
-trait Bar {
-    type A:Ord;
-    fn bar() {println!("Bar")}
-}
-
-trait FooBar :Foo+Bar {
-    type A:Ord;
-    fn foobar() {println!("FooBar")}
-}
-
-
-
+pub mod compiler;
+// pub mod unifier;
 
 fn main() {
     println!("Hello, world!");

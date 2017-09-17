@@ -1,0 +1,87 @@
+foo(X,Y,Z) :- X = Y*10, X = Z+1,Z = Y;
+
+dollars(X,Y,Z);
+foo(X,Y,Z);
+find(X);
+--
+Variable Ordering:
+find(X) demands X.
+X demands foo and dollars
+dollars is a table, so that gets priority.
+dollars(X,Y,Z) -> (X,Y,Z)
+foo induces a filter, because X is supplied from elsewhere.
+> The Unary join algorithm doesn't work here....
+Take 2:
+find(X) demands X.
+X demands foo and dollars.
+foo demands Z and Y to yield X. (determined explicitly from equations)
+Z demands Y to yield.
+Variable Ordering(via topsort on constraints): Y,Z,X 
+
+dollars'(Y) Join foo(Y).
+dollars_Y(Z) Join foo_Y(Z).
+dollars_YZ(X) Join foo_YZ(X).
+
+X is the last join.
+
+To get dollars'(Y), dollars will need to be reindexed to work with leapfrog.
+Same for dollars_Y, and dollars_YZ.
+foo' doesn't do anything at all. This seems suboptimal. 
+foo_Y can start filtering where Z != Y
+It's clear that foo /constrains/ Z when Y is supplied, but does not /constrain/ Y when nothing is supplied.
+***********   This /constraint/ can be calculated by predicate, and bubble up to relation?    ********************
+
+
+--
+
+movie{mid:M};
+rev{rid:R1,movie:M};
+rev{rid:R2,movie:M};
+viewer{name:N1,rid:R1};
+viewer{name:N2,rid:R2};
+R1 != R2;
+
+find{movie:M,first_reviewer:N1,second_reviewer:N2};
+--
+Find Demands M, N1, and N2.
+M depends on movie, rev facts And R1,R2.
+N1,N2 depend on rev and viewer facts and R1,R2 respectively.
+
+
+
+--
+ancestor(X,Y) :- parent(X,Y);
+ancestor(X,Z) :- parent(X,Y), ancestor(Y,Z);
+
+
+// This is illegal because there is an unbound var. 
+grappa(X,Y) :- X = A, parent(X,Y);
+
+// This is illegal because there is a reference to an illegal relation.
+flippa(A,X,Y) :- grappa(X,Y), A = "Bob";
+
+
+// This is illegal, because neither relation bottoms out on any resolvable fact.
+crossways(X,Y)     :- crossways(Y,X),antecrossways(X,Y),foo(X);
+crossways(X,Y)     :- crossways(X,Y),antecrossways(Y,X);
+antecrossways(X,Y) :- crossways(X,Y),antecrossways(Y,X);
+antecrossways(X,Y) :- crossways(X,Y),antecrossways(X,Y);
+
+// This is illegal because a var in the head is unbound in the body.
+extra(A,B) :- foo(A);
+
+// None of that matters, because the find clause doesn't depend in any way on those relations.
+
+parent(A,"Fred");
+ancestor(A,C);
+
+find(A,C);
+
+--
+Find demands A and C.
+A and C are both constrained by ancestor.
+A is constrained by parent.
+parent is a table, resolve this constraint first.
+parent'("Fred") -> [A]
+top ancestor clause is identified as the root, as it only references 
+

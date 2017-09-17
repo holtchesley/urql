@@ -1,31 +1,30 @@
 // use chrono::*;
 // use nom::*;
 
-mod parse_fns;
+pub mod parse_fns;
 
 /// This contains the various structs used to represent the AST
 
 #[derive(Clone,Debug,Hash,Eq,PartialEq,Ord,PartialOrd)]
-pub struct Identifier {
-    id:String
-}
+pub struct Identifier(pub String);
+
 
 impl FromStr for Identifier {
     type Err = ();
     fn from_str(s:&str) -> Result<Identifier,Self::Err> {
-        Ok(Identifier{id:String::from(s)})
+        Ok(Identifier(String::from(s)))
     }
 }
 
 impl From<String> for Identifier {
     fn from(s:String) -> Identifier{
-        Identifier{id:s}
+        Identifier(s)
     }
 }
 
 impl fmt::Display for Identifier {
     fn fmt(&self, format: &mut fmt::Formatter) -> fmt::Result {
-        write!(format,"{}",self.id)
+        write!(format,"{}",self.0)
     }
 }
 
@@ -36,7 +35,7 @@ pub enum Variable {
 }
 
 impl Variable {
-    fn from_str(input:& str) -> Result<Variable,()> {
+    pub fn from_str(input:& str) -> Result<Variable,()> {
         if input == "true" || input == "false" || input == "output" {
             return Err(())
         }
@@ -228,8 +227,8 @@ impl fmt::Display for Expr {
 
 #[derive(PartialEq,Clone,Debug)]
 pub struct Equation {
-    value: Variable,
-    expr: Expr
+    pub value: Variable,
+    pub expr: Expr
 }
 
 impl fmt::Display for Equation {
@@ -243,9 +242,9 @@ use std::collections::Bound;
 
 #[derive(PartialEq,Clone,Debug)]
 pub struct SemiRange {
-    val: Variable,
-    lower: Bound<Term>,
-    upper: Bound<Term>
+    pub val: Variable,
+    pub lower: Bound<Term>,
+    pub upper: Bound<Term>
 }
 
 impl SemiRange {
@@ -331,8 +330,8 @@ impl fmt::Display for Term {
 
 #[derive(PartialEq,Clone,Debug)]
 pub struct RowFact {
-    head: Identifier,
-    terms: Vec<Term>
+    pub head: Identifier,
+    pub terms: Vec<Term>
 }
 
 impl fmt::Display for RowFact {
@@ -374,9 +373,9 @@ impl fmt::Display for TreeTerm {
 
 #[derive(PartialEq,Clone,Debug)]
 pub struct TreeFact {
-    entity: Term,
-    avs: Vec<(Term,TreeTerm)>,
-    t: Term
+    pub entity: Term,
+    pub avs: Vec<(Term,TreeTerm)>,
+    pub t: Term
 }
 
 impl fmt::Display for TreeFact {
@@ -401,7 +400,7 @@ impl fmt::Display for TreeFact {
 }
 
 #[derive(PartialEq,Clone,Debug)]
-pub struct Fact(Pred);
+pub struct Fact(pub Pred);
 
 impl fmt::Display for Fact {
     fn fmt(&self, format: &mut fmt::Formatter) -> fmt::Result {
@@ -433,9 +432,9 @@ impl fmt::Display for Pred {
 
 #[derive(PartialEq,Clone,Debug)]
 pub struct Relation {
-    head:Identifier,
-    vars: Vec<Variable>,
-    preps: Vec<Pred>
+    pub head:Identifier,
+    pub vars: Vec<Variable>,
+    pub preps: Vec<Pred>
 }
 
 impl fmt::Display for Relation {
@@ -486,20 +485,20 @@ mod test_support {
         fn arbitrary<G:Gen>(g: &mut G) -> Self {
             //print!("ID>");
             let s = g.size();
-            Identifier{id:g.gen_ascii_chars().skip_while(|c| c >= &'0' && c <= &'9').take(s).collect()}
+            Identifier(g.gen_ascii_chars().skip_while(|c| c >= &'0' && c <= &'9' && *c != (0 as char)).take(s).collect())
         }
         fn shrink(&self) -> Box<Iterator<Item=Self>> {
-            if self.id.len() <= 1 {
+            if self.0.len() <= 1 {
                 empty_shrinker()
             } else {
-                Box::new(self.id.shrink().filter(|x| {
+                Box::new(self.0.shrink().filter(|x| {
                     if x.len() > 0 {
                         if let Some(c) = x.chars().next() {
                             (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
                         } else {false}
                     } else {false}
                 })
-                         .map(|x| Identifier{id:x}))
+                         .map(|x| Identifier(x)))
             }
         }
     }

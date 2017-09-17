@@ -375,13 +375,8 @@ named!(expr<Expr >,
 );
 
 
-
-
 // Master Expr
 // named!(expr<Expr>, call!(expr_7));
-
-
-
 
 // Term
 named!(term<Term >,
@@ -397,7 +392,7 @@ named!(term<Term >,
 
 // Equation
 
-named!(equation<Equation >,
+named!(pub equation<Equation >,
        do_parse!(
            var:variable >>
                delimited!(toss,tag!("="),toss) >>

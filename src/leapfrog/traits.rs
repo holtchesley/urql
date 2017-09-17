@@ -752,82 +752,66 @@ mod benches {
 
     macro_rules! bench_suite {
         () => {
-            #[ignore]
             #[bench]
             fn dense_10_100_(b:&mut Bencher) {
                 bench_press(D::Dense,10,100,b);
             }
-            #[ignore]
             #[bench]
             fn dense_100_100_(b:&mut Bencher) {
                 bench_press(D::Dense,100,100,b);
             }
-            #[ignore]
             #[bench]
             fn dense_1000_100_(b:&mut Bencher) {
                 bench_press(D::Dense,1000,100,b);
             }
-            #[ignore]
             #[bench]
             fn dense_10_10000_(b:&mut Bencher) {
                 bench_press(D::Dense,10,10000,b);
             }
-            #[ignore]
             #[bench]
             fn dense_100_10000_(b:&mut Bencher) {
                 bench_press(D::Dense,100,10000,b);
             }
-            #[ignore]
             #[bench]
             fn dense_1000_10000_(b:&mut Bencher) {
                 bench_press(D::Dense,1000,10000,b);
             }
-            #[ignore]
             #[bench]
             fn dense_10_1000000_(b:&mut Bencher) {
                 bench_press(D::Dense,10,1000000,b);
             }
-            #[ignore]
             #[bench]
             fn dense_100_1000000_(b:&mut Bencher) {
                 bench_press(D::Dense,100,1000000,b);
             }
-            #[ignore]
             #[bench]
             fn sparse_10_100_(b:&mut Bencher) {
                 bench_press(D::Sparse,10,100,b);
             }
-            #[ignore]
             #[bench]
             fn sparse_100_100_(b:&mut Bencher) {
                 bench_press(D::Sparse,100,100,b);
             }
-            #[ignore]
             #[bench]
             fn sparse_1000_100_(b:&mut Bencher) {
                 bench_press(D::Sparse,1000,100,b);
             }
-            #[ignore]
             #[bench]
             fn sparse_10_10000_(b:&mut Bencher) {
                 bench_press(D::Sparse,10,10000,b);
             }
-            #[ignore]
             #[bench]
             fn sparse_100_10000_(b:&mut Bencher) {
                 bench_press(D::Sparse,100,10000,b);
             }
-            #[ignore]
             #[bench]
             fn sparse_1000_10000_(b:&mut Bencher) {
                 bench_press(D::Sparse,1000,10000,b);
             }
-            #[ignore]
             #[bench]
             fn sparse_10_1000000_(b:&mut Bencher) {
                 bench_press(D::Sparse,10,1000000,b);
             }
-            #[ignore]
             #[bench]
             fn sparse_100_1000000_(b:&mut Bencher) {
                 bench_press(D::Sparse,100,1000000,b);
